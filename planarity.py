@@ -15,7 +15,7 @@
 # You should have received a copy of the GNU General Public License
 # along with untangle.  If not, see <http://www.gnu.org/licenses/>.
 
-from libavg import avg, Point2D, Grabbable, AVGApp
+from libavg import avg, Point2D, Grabbable, AVGApp, button, anim
 from libavg.AVGAppUtil import getMediaDir
 
 import math
@@ -67,10 +67,23 @@ class Clash(object):
     def __init__(self, gameController, pos, edge1, edge2):
         self.__edges = edge1, edge2
         self.__gameController = gameController
-        gameController.addClash()
+        gameController.level.addClash() #XXX
         edge1.addClash(edge2, self)
         edge2.addClash(edge1, self)
-        self.__node = g_player.createNode('image',{'href':'clash.png'})
+        #self.__node = g_player.createNode('image',{
+        #    'href':'clash.png',
+        #    'opacity': 0.7})
+        """
+        self.__node = g_player.createNode('circle',{
+            'r': 10,
+            'strokewidth': 5,
+            'color': 'aa0000'})
+        """
+        self.__node = g_player.createNode('rect',{
+            'width': 20,
+            'height': 20,
+            'strokewidth': 3,
+            'color': 'aa0000'})
         gameController.clashDiv.appendChild(self.__node)
         self.goto(pos)
 
@@ -78,12 +91,12 @@ class Clash(object):
         self.__node.pos = pos - self.__node.size/2
 
     def delete(self):
-        self.__gameController.removeClash()
         edge1, edge2 = self.__edges
-        edge1.removeClash(edge2, self)
-        edge2.removeClash(edge1, self)
-
+        edge1.removeClash(edge2)
+        edge2.removeClash(edge1)
         self.__node.unlink()
+        self.__node = None
+        self.__gameController.level.removeClash() #XXX
 
 
 class Edge(object):
@@ -104,11 +117,6 @@ class Edge(object):
 
     def getLine(self):
         return [v.pos for v in self.__vertices]
-        #v1, v2 = self.__vertices[0].pos, self.__vertices[1].pos
-        # this is a trick to avoid clashes at vertex centers
-        #p1 = v1 + (v2-v1).getNormalized()
-        #p2 = v2 + (v1-v2).getNormalized()
-        #return p1, p2
 
     def checkCollisions(self):
         for other in self.__gameController.getEdges():
@@ -120,6 +128,7 @@ class Edge(object):
                     self.__clashes[other].delete()
             elif pos: # new clash
                 Clash(self.__gameController, pos, self, other)
+        self.__gameController.level.checkWin() # XXX
 
     def onVertexMotion(self):
         self.checkCollisions()
@@ -130,7 +139,7 @@ class Edge(object):
         self.__clashes[other] = clash
         self.updateClashState()
 
-    def removeClash(self, other, clash):
+    def removeClash(self, other):
         del self.__clashes[other]
         self.updateClashState()
 
@@ -138,7 +147,7 @@ class Edge(object):
         self.__line.pos1 = self.__vertices[0].pos
         self.__line.pos2 = self.__vertices[1].pos
         if self.isClashed():
-            self.__line.color = 'ff0000' # red
+            self.__line.color = 'ff6000' # red
         else:
             self.__line.color = 'ffffff' # white
 
@@ -153,6 +162,13 @@ class Edge(object):
     def isClashed(self):
         return len(self.__clashes) > 0
 
+    def delete(self):
+        self.__gameController.removeEdge(self)
+        self.__line.unlink()
+        self.__line = None
+        self.__clashes = {}
+        pass
+
 class Vertex(object):
     def __init__(self, gameController, pos):
         pos = Point2D(pos)
@@ -162,10 +178,9 @@ class Vertex(object):
         parent = gameController.vertexDiv
         parent.appendChild(self.__node)
         self.__node.pos = pos - self.__node.size/2
-        self.__clashState = True
+        self.__clashState = False
 
         def onMotion (pos,size,angle,pivot):
-            # TODO: restrict pos to playing area
             width, height = self.__node.size
             pos.x = min(max(pos.x, 0), parent.width - width)
             pos.y = min(max(pos.y, 0), parent.height - height)
@@ -196,60 +211,57 @@ class Vertex(object):
         if clashState != self.__clashState:
             self.__clashState = clashState
             if clashState:
-                self.__node.opacity = 1
+                self.__node.href = 'vertex_clash.png'
             else:
-                self.__node.opacity = 0.5
+                self.__node.href = 'vertex.png'
 
     @property
     def pos(self):
         return self.__node.pos + self.__node.size/2
 
-class GameController(object):
-    def __init__(self, parentNode):
+    def delete(self):
+        self.__grabbable.delete()
+        self.__node.unlink()
+        self.__node = None
+        self.__edges = None
+
+class Level(object):
+    def __init__(self, gameController):
+        self.__gameController = gameController
+        self.__isRunning = False
         self.__numClashes = 0
-        self.__edges = []
-        self.edgeDiv = g_player.createNode('div',{'sensitive':False})
-        self.vertexDiv = g_player.createNode('div',{})
-        self.clashDiv = g_player.createNode('div',{'sensitive':False})
-        for div in (self.edgeDiv, self.vertexDiv, self.clashDiv):
-            parentNode.appendChild(div)
-            div.size = parentNode.size
 
     def addClash(self):
         self.__numClashes +=1
+        self.__gameController.updateStatus()
 
     def removeClash(self):
         assert self.__numClashes > 0
         self.__numClashes -=1
-        if self.__numClashes == 0:
-            print "WINNER!"
+        self.__gameController.updateStatus()
 
-    def addEdge(self, edge):
-        self.__edges.append(edge)
+    def getStatus(self):
+        return "clashes to resolve: %u" % ( self.__numClashes)
 
-    def getEdges(self):
-        return self.__edges
+    def checkWin(self):
+        if self.__isRunning and self.__numClashes == 0:
+            self.__gameController.levelWon()
 
-    def startLevel(self):
-        # XXX create vertices and edges here
-
-        v1 = Vertex(self, (100,300))
-        v2 = Vertex(self, (500,300))
-        v3 = Vertex(self, (200,100))
-        v4 = Vertex(self, (200,500))
-        v5 = Vertex(self, (300,500))
+    def start(self):
+        v1 = Vertex(self.__gameController, (100,300))
+        v2 = Vertex(self.__gameController, (500,300))
+        v3 = Vertex(self.__gameController, (200,100))
+        v4 = Vertex(self.__gameController, (200,500))
+        v5 = Vertex(self.__gameController, (300,500))
         vertices = [v1,v2,v3,v4]
 
         import random
-        for i in range(10):
+        for i in range(20):
             x = random.uniform(100,500)
             y = random.uniform(100,500)
-            v = Vertex(self, (x,y))
+            v = Vertex(self.__gameController, (x,y))
             vertices.append(v)
-
-
         edges = []
-
         for vertex1 in vertices:
             cnt = 0
             for vertex2 in vertices:
@@ -258,24 +270,168 @@ class GameController(object):
                 if vertex1 is vertex2:
                     continue
                 cnt+=1
-                edges.append(Edge(self, vertex1, vertex2))
-        edges.append(Edge(self, v4, v5))
+                edges.append(Edge(self.__gameController, vertex1, vertex2))
+        edges.append(Edge(self.__gameController, v4, v5))
 
         for edge in edges: # might be able to remove this if vertex default state is unclashed
             edge.checkCollisions()
 
-        for vertex in vertices + [v5]:
+        vertices.append(v5)
+        for vertex in vertices:
             vertex.updateClashState()
 
+        self.edges = edges
+        self.vertices = vertices
+        self.__isRunning = True
+        return (vertices, edges)
+
+    def stop(self):
+        self.__isRunning = False
+        for edge in self.edges:
+            edge.delete()
+        self.edges = []
+
+        for vertex in self.vertices:
+            vertex.delete()
+        self.vertices = []
+
+class GameController(object):
+    def __init__(self, parentNode, onExit):
+        self.__edges = []
+        self.gameDiv = g_player.createNode('div',{})
+        parentNode.appendChild(self.gameDiv)
+
+        self.edgeDiv = g_player.createNode('div',{'sensitive':False})
+        self.vertexDiv = g_player.createNode('div',{})
+        self.clashDiv = g_player.createNode('div',{'sensitive':False})
+        for div in (self.edgeDiv, self.vertexDiv, self.clashDiv):
+            self.gameDiv.appendChild(div)
+            div.size = parentNode.size
+
+        self.winnerDiv = g_player.createNode('words', {
+            'text': "YOU WON!",
+            'size': 100,
+            'opacity': 0,
+            'sensitive': False,
+            })
+        parentNode.appendChild(self.winnerDiv)
+        self.winnerDiv.pos = (parentNode.size - Point2D(self.winnerDiv.getMediaSize())) / 2
+
+        self.levelMenu = LevelMenu(parentNode)
+        exitButton = LabelButton(parentNode,
+                pos = (50,50),
+                text = 'exit',
+                size = None,
+                callback = lambda e: onExit)
+        levelButton = LabelButton(parentNode,
+                pos = (200,50),
+                text = 'levels',
+                size = None,
+                callback = lambda e:self.levelMenu.open())
+
+        statusNode = g_player.createNode('words', { })
+        statusNode.pos = (400, 50)
+
+        def setStatus(text):
+            statusNode.text = text
+        self.__statusHandler = setStatus
+
+        self.level = Level(self)
+        self.level.start()
+
+    def addEdge(self, edge):
+        self.__edges.append(edge)
+    
+    def removeEdge(self, edge):
+        self.__edges.remove(edge)
+
+    def getEdges(self):
+        return self.__edges
+
+
+    def updateStatus(self):
+        self.__statusHandler(self.level.getStatus())
+
+    def levelWon(self):
+        def nextLevel():
+            self.level.stop()
+            # XXX: load next level
+            self.level.start()
+            anim.ParallelAnim([
+                    anim.fadeOut(self.winnerDiv, 400),
+                    anim.fadeIn(self.gameDiv, 400),
+                    ],
+                    onStop = lambda: None
+                    ).start()
+        anim.ParallelAnim([
+                anim.fadeIn(self.winnerDiv, 600),
+                anim.fadeOut(self.gameDiv, 600),
+                ],
+                onStop = lambda: g_player.setTimeout(1000,nextLevel)).start()
+
+
+class LabelButton(button.Button):
+    def __init__(self, parentNode, pos, text, size, callback):
+        if size is None:
+            size = 17
+        mainDiv = g_player.createNode('div',{})
+        mainDiv.pos = pos
+        parentNode.appendChild(mainDiv)
+        for i in range(4):
+            labelNode = g_player.createNode('words',{
+                'size': size,
+                'text': text,
+                })
+            mainDiv.appendChild(labelNode)
+        button.Button.__init__(self, mainDiv, callback)
+
+class LevelMenu:
+    def __init__(self, parentNode):
+        # main div catches all clicks and disables game underneath
+        self.mainDiv = g_player.createNode('div',{
+            'active':False,
+            'opacity':0})
+        self.mainDiv.size = parentNode.size
+        parentNode.appendChild(self.mainDiv)
+
+        menuDiv = g_player.createNode('div',{})
+        self.mainDiv.appendChild(menuDiv)
+
+        menuDiv.pos = (140,100)
+        menuDiv.size = (1000,500)
+        bgImage = g_player.createNode('image',
+                {'href': 'menubg.png'})
+        bgImage.size = menuDiv.size
+        menuDiv.appendChild(bgImage)
+
+        xxx = g_player.createNode('words',
+                {'text': 'IMPLEMENT ME'})
+        menuDiv.appendChild(xxx)
+
+        LabelButton(menuDiv,
+                (50,50),
+                text = 'close menu',
+                size = None,
+                callback = lambda e:self.close())
+
+
+    def open(self):
+        self.mainDiv.active = True
+        anim.fadeIn(self.mainDiv, 400).start()
+
+    def close(self):
+        def setInactive():
+            self.mainDiv.active = False
+        anim.fadeOut(self.mainDiv, 400, onStop = setInactive).start()
 
 class Planarity(AVGApp):
     multitouch = True
     def init(self):
         self._parentNode.mediadir = getMediaDir(__file__)
-        self.__controller = GameController(self._parentNode)
+        self.__controller = GameController(self._parentNode, onExit = self.leave)
 
     def _enter(self):
-        self.__controller.startLevel()
+        #self.__controller.startLevel()
         pass
 
     def _leave(self):
