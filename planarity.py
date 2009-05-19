@@ -19,6 +19,8 @@ from libavg import avg, Point2D, Grabbable, AVGApp, button, anim
 from libavg.AVGAppUtil import getMediaDir
 
 import math
+import gzip
+import cPickle
 
 g_player = avg.Player.get()
 
@@ -163,6 +165,8 @@ class Edge(object):
         return len(self.__clashes) > 0
 
     def delete(self):
+        for clash in self.__clashes.values():
+            clash.delete()
         self.__gameController.removeEdge(self)
         self.__line.unlink()
         self.__line = None
@@ -241,49 +245,35 @@ class Level(object):
         self.__gameController.updateStatus()
 
     def getStatus(self):
-        return "clashes to resolve: %u" % ( self.__numClashes)
+        type_, number = self.__scoring[2:4]
+        return "clashes left: %u\tgoal %c %u" % ( self.__numClashes, type_, number)
 
     def checkWin(self):
-        if self.__isRunning and self.__numClashes == 0:
-            self.__gameController.levelWon()
+        type_, number = self.__scoring[2:4]
+        print type, number, self.__numClashes
+        if self.__isRunning:
+            if ((type_=='=' and self.__numClashes == number)
+                    or (type_=='<' and self.__numClashes < number)):
+                self.__gameController.levelWon()
 
-    def start(self):
-        v1 = Vertex(self.__gameController, (100,300))
-        v2 = Vertex(self.__gameController, (500,300))
-        v3 = Vertex(self.__gameController, (200,100))
-        v4 = Vertex(self.__gameController, (200,500))
-        v5 = Vertex(self.__gameController, (300,500))
-        vertices = [v1,v2,v3,v4]
+    def start(self, levelData):
+        self.__scoring = levelData["scoring"]
+        self.vertices = []
+        for vertexCoord in levelData["vertices"]:
+            # transform coord here
+            self.vertices.append(Vertex(self.__gameController, vertexCoord))
 
-        import random
-        for i in range(20):
-            x = random.uniform(100,500)
-            y = random.uniform(100,500)
-            v = Vertex(self.__gameController, (x,y))
-            vertices.append(v)
-        edges = []
-        for vertex1 in vertices:
-            cnt = 0
-            for vertex2 in vertices:
-                if cnt==2:
-                    continue
-                if vertex1 is vertex2:
-                    continue
-                cnt+=1
-                edges.append(Edge(self.__gameController, vertex1, vertex2))
-        edges.append(Edge(self.__gameController, v4, v5))
+        self.edges = []
+        for v1, v2 in levelData["edges"]:
+            self.edges.append(Edge(self.__gameController, self.vertices[v1], self.vertices[v2]))
 
-        for edge in edges: # might be able to remove this if vertex default state is unclashed
+
+        for edge in self.edges: # might be able to remove this if vertex default state is unclashed
             edge.checkCollisions()
-
-        vertices.append(v5)
-        for vertex in vertices:
+        for vertex in self.vertices:
             vertex.updateClashState()
 
-        self.edges = edges
-        self.vertices = vertices
         self.__isRunning = True
-        return (vertices, edges)
 
     def stop(self):
         self.__isRunning = False
@@ -295,8 +285,15 @@ class Level(object):
             vertex.delete()
         self.vertices = []
 
+def loadLevels():
+    fp = gzip.open('data/levels.pickle.gz')
+    levels = cPickle.load(fp)
+    fp.close()
+    return levels
+
 class GameController(object):
     def __init__(self, parentNode, onExit):
+        self.__levels = loadLevels()
         self.__edges = []
         self.gameDiv = g_player.createNode('div',{})
         parentNode.appendChild(self.gameDiv)
@@ -318,26 +315,32 @@ class GameController(object):
         self.winnerDiv.pos = (parentNode.size - Point2D(self.winnerDiv.getMediaSize())) / 2
 
         self.levelMenu = LevelMenu(parentNode)
-        exitButton = LabelButton(parentNode,
-                pos = (50,50),
+        infoBar = g_player.createNode('div',{'sensitive':False})
+        infoBar.pos = (0,50)
+        parentNode.appendChild(infoBar)
+
+        exitButton = LabelButton(infoBar,
+                pos = (50,0),
                 text = 'exit',
                 size = None,
                 callback = lambda e: onExit)
-        levelButton = LabelButton(parentNode,
-                pos = (200,50),
+        levelButton = LabelButton(infoBar,
+                pos = (200,0),
                 text = 'levels',
                 size = None,
                 callback = lambda e:self.levelMenu.open())
 
-        statusNode = g_player.createNode('words', { })
-        statusNode.pos = (400, 50)
+        statusNode = g_player.createNode('words', { 'size':17})
+        statusNode.pos = (400, 0)
+        infoBar.appendChild(statusNode)
 
         def setStatus(text):
             statusNode.text = text
         self.__statusHandler = setStatus
 
+        self.__curLevel = 2
         self.level = Level(self)
-        self.level.start()
+        self.__startNextLevel()
 
     def addEdge(self, edge):
         self.__edges.append(edge)
@@ -348,15 +351,19 @@ class GameController(object):
     def getEdges(self):
         return self.__edges
 
-
     def updateStatus(self):
         self.__statusHandler(self.level.getStatus())
+
+    def __startNextLevel(self):
+        level = self.__levels[self.__curLevel]
+        self.level.start(level)
+        self.__curLevel+=1
+        self.__curLevel %= len(self.__levels)
 
     def levelWon(self):
         def nextLevel():
             self.level.stop()
-            # XXX: load next level
-            self.level.start()
+            self.__startNextLevel()
             anim.ParallelAnim([
                     anim.fadeOut(self.winnerDiv, 400),
                     anim.fadeIn(self.gameDiv, 400),
