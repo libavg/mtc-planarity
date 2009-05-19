@@ -1,6 +1,6 @@
 import os
 from libavg.AVGAppUtil import getMediaDir, createImagePreviewNode
-from .planarity import Planarity,
+from .planarity import Planarity
 
 __all__ = [ 'apps', ]
 

@@ -286,7 +286,7 @@ class Level(object):
         self.vertices = []
 
 def loadLevels():
-    fp = gzip.open('data/levels.pickle.gz')
+    fp = gzip.open(getMediaDir(__file__,'data/levels.pickle.gz'))
     levels = cPickle.load(fp)
     fp.close()
     return levels
@@ -295,6 +295,10 @@ class GameController(object):
     def __init__(self, parentNode, onExit):
         self.__levels = loadLevels()
         self.__edges = []
+        bgImage = g_player.createNode('image',
+                {'href':'black.png'})
+        bgImage.size = parentNode.size
+        parentNode.appendChild(bgImage)
         self.gameDiv = g_player.createNode('div',{})
         parentNode.appendChild(self.gameDiv)
 
@@ -315,30 +319,30 @@ class GameController(object):
         self.winnerDiv.pos = (parentNode.size - Point2D(self.winnerDiv.getMediaSize())) / 2
 
         self.levelMenu = LevelMenu(parentNode)
-        infoBar = g_player.createNode('div',{'sensitive':False})
-        infoBar.pos = (0,50)
-        parentNode.appendChild(infoBar)
 
-        exitButton = LabelButton(infoBar,
-                pos = (50,0),
+        exitButton = LabelButton(parentNode,
+                pos = (50, 50),
                 text = 'exit',
-                size = None,
-                callback = lambda e: onExit)
-        levelButton = LabelButton(infoBar,
-                pos = (200,0),
+                size = 30,
+                callback = lambda e: onExit())
+        """
+        levelButton = LabelButton(parentNode,
+                pos = (220, 50),
                 text = 'levels',
-                size = None,
+                size = 30,
                 callback = lambda e:self.levelMenu.open())
+        """
 
-        statusNode = g_player.createNode('words', { 'size':17})
-        statusNode.pos = (400, 0)
-        infoBar.appendChild(statusNode)
+        statusNode = g_player.createNode('words', { 'size':30,
+            'sensitive':False})
+        statusNode.pos = (900, 50)
+        parentNode.appendChild(statusNode)
 
         def setStatus(text):
             statusNode.text = text
         self.__statusHandler = setStatus
 
-        self.__curLevel = 2
+        self.__curLevel = 0
         self.level = Level(self)
         self.__startNextLevel()
 
