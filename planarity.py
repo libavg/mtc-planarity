@@ -82,8 +82,7 @@ class Clash(object):
             'color': 'aa0000'})
         """
         self.__node = g_player.createNode('rect',{
-            'width': 20,
-            'height': 20,
+            'size': Point2D(20,20),
             'strokewidth': 3,
             'color': 'aa0000'})
         gameController.clashDiv.appendChild(self.__node)
@@ -250,7 +249,6 @@ class Level(object):
 
     def checkWin(self):
         type_, number = self.__scoring[2:4]
-        print type, number, self.__numClashes
         if self.__isRunning:
             if ((type_=='=' and self.__numClashes == number)
                     or (type_=='<' and self.__numClashes < number)):
@@ -311,7 +309,7 @@ class GameController(object):
 
         self.winnerDiv = g_player.createNode('words', {
             'text': "YOU WON!",
-            'size': 100,
+            'fontsize': 100,
             'opacity': 0,
             'sensitive': False,
             })
@@ -333,7 +331,8 @@ class GameController(object):
                 callback = lambda e:self.levelMenu.open())
         """
 
-        statusNode = g_player.createNode('words', { 'size':30,
+        statusNode = g_player.createNode('words', {
+            'fontsize':30,
             'sensitive':False})
         statusNode.pos = (900, 50)
         parentNode.appendChild(statusNode)
@@ -390,7 +389,7 @@ class LabelButton(button.Button):
         parentNode.appendChild(mainDiv)
         for i in range(4):
             labelNode = g_player.createNode('words',{
-                'size': size,
+                'fontsize': size,
                 'text': text,
                 })
             mainDiv.appendChild(labelNode)
