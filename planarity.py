@@ -2,25 +2,28 @@
 # Copyright (C) 2009
 #    Martin Heistermann, <mh at sponc dot de>
 #
-# untangle is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
+# planarity (aka untangle) is free software: you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as published
+# by the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
 #
-# untangle is distributed in the hope that it will be useful,
+# planarity is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
 #
 # You should have received a copy of the GNU General Public License
-# along with untangle.  If not, see <http://www.gnu.org/licenses/>.
+# along with planarity.  If not, see <http://www.gnu.org/licenses/>.
 
-from libavg import avg, Point2D, Grabbable, AVGApp, button, anim
+from libavg import avg, Point2D, AVGApp
 from libavg.AVGAppUtil import getMediaDir
 
+from os import getenv
 import math
 import gzip
 import cPickle
+
+from buttons import *
 
 g_player = avg.Player.get()
 
@@ -65,6 +68,7 @@ def line_intersect(line1, line2):
 
     return False
 
+
 class Clash(object):
     def __init__(self, gameController, pos, edge1, edge2):
         self.__edges = edge1, edge2
@@ -81,10 +85,10 @@ class Clash(object):
             'strokewidth': 5,
             'color': 'aa0000'})
         """
-        self.__node = g_player.createNode('rect',{
-            'size': Point2D(20,20),
-            'strokewidth': 3,
-            'color': 'aa0000'})
+        self.__node = g_player.createNode('rect', {
+                'size':Point2D(20,20),
+                'strokewidth':3,
+                'color':'aa0000'})
         gameController.clashDiv.appendChild(self.__node)
         self.goto(pos)
 
@@ -107,11 +111,8 @@ class Edge(object):
             vertex.addEdge(self)
         self.__clashes = {}
         self.__gameController = gameController
-        self.__gameController.addEdge(self)
 
-        self.__line = g_player.createNode('line',{
-            'strokewidth': 3,
-            })
+        self.__line = g_player.createNode('line', {'strokewidth':3})
         gameController.edgeDiv.appendChild(self.__line)
         self.__draw()
         self.__clashState = False
@@ -127,13 +128,15 @@ class Edge(object):
                     self.__clashes[other].goto(pos)
                 else:
                     self.__clashes[other].delete()
+                    return True
             elif pos: # new clash
                 Clash(self.__gameController, pos, self, other)
-        self.__gameController.level.checkWin() # XXX
+        return False
 
     def onVertexMotion(self):
-        self.checkCollisions()
+        clashRemoved = self.checkCollisions()
         self.__draw()
+        return clashRemoved
 
     def addClash(self, other, clash):
         assert other not in self.__clashes.keys()
@@ -163,44 +166,49 @@ class Edge(object):
     def isClashed(self):
         return len(self.__clashes) > 0
 
+    def highlightOtherVertex(self, thisVertex, addHighlighter):
+        if thisVertex is self.__vertices[0]:
+            self.__vertices[1].highlight(addHighlighter)
+        else:
+            self.__vertices[0].highlight(addHighlighter)
+
     def delete(self):
         for clash in self.__clashes.values():
             clash.delete()
-        self.__gameController.removeEdge(self)
         self.__line.unlink()
         self.__line = None
         self.__clashes = {}
-        pass
+
 
 class Vertex(object):
     def __init__(self, gameController, pos):
         pos = Point2D(pos)
-        self.__pos = pos
         self.__edges = []
         self.__node = g_player.createNode('image', {'href':'vertex.png'})
         parent = gameController.vertexDiv
         parent.appendChild(self.__node)
-        self.__node.pos = pos - self.__node.size/2
+        self.__nodeOffset = self.__node.size / 2
+        self.__node.pos = pos - self.__nodeOffset
         self.__clashState = False
+        self.__numHighlighters = 0
 
-        def onMotion (pos,size,angle,pivot):
-            width, height = self.__node.size
-            pos.x = min(max(pos.x, 0), parent.width - width)
-            pos.y = min(max(pos.y, 0), parent.height - height)
-            self.__node.pos = pos
+        def onUpDown(event):
             for edge in self.__edges:
-                edge.onVertexMotion()
+                edge.highlightOtherVertex(self, event.type==avg.CURSORDOWN)
 
-        self.__grabbable = Grabbable(
-                node = self.__node,
-                minSize = self.__node.size,
-                maxSize = self.__node.size,
-                onMotion = onMotion,
-                inertia = 0,
-                torque = 0,
-                moveNode = False
-                )
-        self.__onMotion = []
+        def onMotion(event):
+            pos.x = min(max(pos.x+event.motion.x, self.__nodeOffset.x),
+                    parent.width - self.__nodeOffset.x)
+            pos.y = min(max(pos.y+event.motion.y, self.__nodeOffset.y),
+                    parent.height - self.__nodeOffset.y)
+            self.__node.pos = pos - self.__nodeOffset
+            clashRemoved = False
+            for edge in self.__edges:
+                clashRemoved |= edge.onVertexMotion()
+            if clashRemoved:
+                gameController.level.checkWin()
+
+        self.__button = MoveButton(self.__node, onUpDown, onUpDown, onMotion)
 
     def addEdge(self, edge):
         self.__edges.append(edge)
@@ -210,23 +218,44 @@ class Vertex(object):
         for edge in self.__edges:
             if edge.isClashed():
                 clashState = True
+                break
 
         if clashState != self.__clashState:
             self.__clashState = clashState
-            if clashState:
-                self.__node.href = 'vertex_clash.png'
-            else:
-                self.__node.href = 'vertex.png'
+            self.__setNodeImage(self.__numHighlighters>0)
+
+    def highlight(self, addHighlighter):
+        if addHighlighter:
+            self.__numHighlighters += 1
+            if self.__numHighlighters == 1:
+                self.__setNodeImage(True)
+        else:
+            assert self.__numHighlighters > 0
+            self.__numHighlighters -= 1
+            if self.__numHighlighters == 0:
+                self.__setNodeImage(False)
+
+    def __setNodeImage(self, highlight):
+        if highlight:
+            href = 'vertex_hl'
+        else:
+            href = 'vertex'
+        if self.__clashState:
+            self.__node.href = href + '_clash.png'
+        else:
+            self.__node.href = href + '.png'
 
     @property
     def pos(self):
-        return self.__node.pos + self.__node.size/2
+        return self.__node.pos + self.__nodeOffset
 
     def delete(self):
-        self.__grabbable.delete()
+        self.__button.delete()
+        self.__button = None
         self.__node.unlink()
         self.__node = None
         self.__edges = None
+
 
 class Level(object):
     def __init__(self, gameController):
@@ -245,33 +274,40 @@ class Level(object):
 
     def getStatus(self):
         type_, number = self.__scoring[2:4]
-        return "clashes left: %u\tgoal %c %u" % ( self.__numClashes, type_, number)
+        return "clashes left: %u<br/>goal %c %u" %(self.__numClashes, type_, number)
+
+    def getName(self):
+        return self.__levelData['name']
 
     def checkWin(self):
-        type_, number = self.__scoring[2:4]
         if self.__isRunning:
+            type_, number = self.__scoring[2:4]
             if ((type_=='=' and self.__numClashes == number)
                     or (type_=='<' and self.__numClashes < number)):
                 self.__gameController.levelWon()
 
     def start(self, levelData):
+        self.__levelData = levelData
         self.__scoring = levelData["scoring"]
+        self.__levelData['menuLabel'].color = 'ffffff' # unlock level -> white
         self.vertices = []
         for vertexCoord in levelData["vertices"]:
             # transform coord here
+            if self.__gameController.vertexDiv.height == 800:
+                vertexCoord = (vertexCoord[0], vertexCoord[1] + 40)
             self.vertices.append(Vertex(self.__gameController, vertexCoord))
 
         self.edges = []
         for v1, v2 in levelData["edges"]:
             self.edges.append(Edge(self.__gameController, self.vertices[v1], self.vertices[v2]))
 
-
-        for edge in self.edges: # might be able to remove this if vertex default state is unclashed
+        for edge in self.edges:
             edge.checkCollisions()
-        for vertex in self.vertices:
-            vertex.updateClashState()
 
         self.__isRunning = True
+
+    def pause(self):
+        self.__isRunning = False
 
     def stop(self):
         self.__isRunning = False
@@ -283,156 +319,209 @@ class Level(object):
             vertex.delete()
         self.vertices = []
 
+
 def loadLevels():
-    fp = gzip.open(getMediaDir(__file__,'data/levels.pickle.gz'))
+    fp = gzip.open(getMediaDir(__file__, 'data/levels.pickle.gz'))
     levels = cPickle.load(fp)
     fp.close()
     return levels
 
+
 class GameController(object):
     def __init__(self, parentNode, onExit):
         self.__levels = loadLevels()
-        self.__edges = []
-        bgImage = g_player.createNode('image',
-                {'href':'black.png'})
+        bgImage = g_player.createNode('image', {'href':'black.png'})
         bgImage.size = parentNode.size
         parentNode.appendChild(bgImage)
-        self.gameDiv = g_player.createNode('div',{})
+        self.gameDiv = g_player.createNode('div', {})
         parentNode.appendChild(self.gameDiv)
 
-        self.edgeDiv = g_player.createNode('div',{'sensitive':False})
-        self.vertexDiv = g_player.createNode('div',{})
-        self.clashDiv = g_player.createNode('div',{'sensitive':False})
+        self.edgeDiv = g_player.createNode('div', {'sensitive':False})
+        self.vertexDiv = g_player.createNode('div', {})
+        self.clashDiv = g_player.createNode('div', {'sensitive':False})
         for div in (self.edgeDiv, self.vertexDiv, self.clashDiv):
             self.gameDiv.appendChild(div)
             div.size = parentNode.size
 
         self.winnerDiv = g_player.createNode('words', {
-            'text': "YOU WON!",
-            'fontsize': 100,
-            'opacity': 0,
-            'sensitive': False,
-            })
+                'text':"YOU WON!",
+                'fontsize':100,
+                'opacity':0,
+                'sensitive':False})
         parentNode.appendChild(self.winnerDiv)
         self.winnerDiv.pos = (parentNode.size - Point2D(self.winnerDiv.getMediaSize())) / 2
 
-        self.levelMenu = LevelMenu(parentNode)
-
-        exitButton = LabelButton(parentNode,
-                pos = (50, 50),
-                text = 'exit',
-                size = 30,
-                callback = lambda e: onExit())
-        """
-        levelButton = LabelButton(parentNode,
-                pos = (220, 50),
-                text = 'levels',
-                size = 30,
-                callback = lambda e:self.levelMenu.open())
-        """
+        LabelButton(parentNode, (50, 50), 'exit', 30, onExit)
+        LabelButton(parentNode, (150, 50), 'levels', 30,
+                callback = lambda:self.levelMenu.open(self.__curLevel-1))
 
         statusNode = g_player.createNode('words', {
-            'fontsize':30,
-            'sensitive':False})
-        statusNode.pos = (900, 50)
+                'pos':(parentNode.width-50, 50),
+                'fontsize':30,
+                'alignment':'right',
+                'sensitive':False})
         parentNode.appendChild(statusNode)
 
         def setStatus(text):
             statusNode.text = text
         self.__statusHandler = setStatus
 
+        levelNameDiv = g_player.createNode('div', {'sensitive':False})
+        self.gameDiv.appendChild(levelNameDiv)
+        bgImage = g_player.createNode('image', {'href':'menubg.png'})
+        levelNameDiv.appendChild(bgImage)
+        levelNameNode = g_player.createNode('words', {
+                'fontsize':30,
+                'pos':(20, 20),
+                'sensitive':False})
+        levelNameDiv.appendChild(levelNameNode)
+
+        def setLevelName(text):
+            levelNameNode.text = text
+            levelNameSize = levelNameNode.getMediaSize()
+            bgImage.size = levelNameSize + Point2D(40, 40)
+            levelNameDiv.pos = parentNode.size / 2 - bgImage.size / 2
+            levelNameDiv.opacity = 1
+            avg.fadeOut(levelNameDiv, 6000)
+        self.__levelNameHandler = setLevelName
+
+        self.levelMenu = LevelMenu(parentNode, self.__levels, self.switchLevel)
+
         self.__curLevel = 0
         self.level = Level(self)
         self.__startNextLevel()
 
-    def addEdge(self, edge):
-        self.__edges.append(edge)
-    
-    def removeEdge(self, edge):
-        self.__edges.remove(edge)
-
     def getEdges(self):
-        return self.__edges
+        return self.level.edges
 
     def updateStatus(self):
         self.__statusHandler(self.level.getStatus())
 
+    def switchLevel(self, levelIndex):
+        self.__curLevel = levelIndex
+        self.levelWon(False)
+
     def __startNextLevel(self):
+        self.__curLevel %= len(self.__levels)
         level = self.__levels[self.__curLevel]
         self.level.start(level)
-        self.__curLevel+=1
-        self.__curLevel %= len(self.__levels)
+        self.__levelNameHandler(self.level.getName())
+        self.__curLevel += 1
 
-    def levelWon(self):
+    def levelWon(self, showWinnerDiv=True):
         def nextLevel():
             self.level.stop()
             self.__startNextLevel()
-            anim.ParallelAnim([
-                    anim.fadeOut(self.winnerDiv, 400),
-                    anim.fadeIn(self.gameDiv, 400),
-                    ],
-                    onStop = lambda: None
-                    ).start()
-        anim.ParallelAnim([
-                anim.fadeIn(self.winnerDiv, 600),
-                anim.fadeOut(self.gameDiv, 600),
-                ],
-                onStop = lambda: g_player.setTimeout(1000,nextLevel)).start()
+            if showWinnerDiv:
+                avg.fadeOut(self.winnerDiv, 400)
+            avg.fadeIn(self.gameDiv, 400)
+        self.level.pause()
+        if showWinnerDiv:
+            avg.fadeIn(self.winnerDiv, 600)
+            avg.fadeOut(self.gameDiv, 600, lambda: g_player.setTimeout(1000, nextLevel))
+        else:
+            avg.fadeOut(self.gameDiv, 600, nextLevel)
 
-
-class LabelButton(button.Button):
-    def __init__(self, parentNode, pos, text, size, callback):
-        if size is None:
-            size = 17
-        mainDiv = g_player.createNode('div',{})
-        mainDiv.pos = pos
-        parentNode.appendChild(mainDiv)
-        for i in range(4):
-            labelNode = g_player.createNode('words',{
-                'fontsize': size,
-                'text': text,
-                })
-            mainDiv.appendChild(labelNode)
-        button.Button.__init__(self, mainDiv, callback)
 
 class LevelMenu:
-    def __init__(self, parentNode):
+    def __init__(self, parentNode, levels, callback):
         # main div catches all clicks and disables game underneath
-        self.mainDiv = g_player.createNode('div',{
-            'active':False,
-            'opacity':0})
-        self.mainDiv.size = parentNode.size
-        parentNode.appendChild(self.mainDiv)
+        mainDiv = g_player.createNode('div', {
+                'size':parentNode.size,
+                'active':False,
+                'opacity':0})
+        parentNode.appendChild(mainDiv)
 
-        menuDiv = g_player.createNode('div',{})
-        self.mainDiv.appendChild(menuDiv)
+        menuDiv = g_player.createNode('div', {
+                'pos':(mainDiv.width/2-400, 120),
+                'size':(800, mainDiv.height-236)})
+        mainDiv.appendChild(menuDiv)
 
-        menuDiv.pos = (140,100)
-        menuDiv.size = (1000,500)
-        bgImage = g_player.createNode('image',
-                {'href': 'menubg.png'})
-        bgImage.size = menuDiv.size
+        bgImage = g_player.createNode('image', {
+                'href':'menubg.png',
+                'size':menuDiv.size})
         menuDiv.appendChild(bgImage)
 
-        xxx = g_player.createNode('words',
-                {'text': 'IMPLEMENT ME'})
-        menuDiv.appendChild(xxx)
+        listFrameDiv = g_player.createNode('div', {
+                'pos':(0, 2),
+                'size':(menuDiv.width, menuDiv.height-44)})
+        menuDiv.appendChild(listFrameDiv)
 
-        LabelButton(menuDiv,
-                (50,50),
-                text = 'close menu',
-                size = None,
-                callback = lambda e:self.close())
+        selectionBg = g_player.createNode('rect', {
+                'pos':(-1, listFrameDiv.height/2-20),
+                'size':(listFrameDiv.width+2, 40),
+                'fillcolor':'ff6000'}) # red
+        listFrameDiv.appendChild(selectionBg)
 
+        listDiv = g_player.createNode('div', {
+                'sensitive':False})
+        listFrameDiv.appendChild(listDiv)
 
-    def open(self):
-        self.mainDiv.active = True
-        anim.fadeIn(self.mainDiv, 400).start()
+        pos = Point2D(listFrameDiv.width/2, 12)
+        for level in levels:
+            level['menuLabel'] = g_player.createNode('words', {
+                    'text':level['name'],
+                    'pos':pos,
+                    'color':'7f7f7f', # initially locked -> gray
+                    'alignment':'center'})
+            listDiv.appendChild(level['menuLabel'])
+            pos += Point2D(0, 40)
 
-    def close(self):
-        def setInactive():
-            self.mainDiv.active = False
-        anim.fadeOut(self.mainDiv, 400, onStop = setInactive).start()
+        separatorLine = g_player.createNode('line', {
+                'pos1':(0, menuDiv.height-38),
+                'pos2':(menuDiv.width, menuDiv.height-38)})
+        menuDiv.appendChild(separatorLine)
+
+        listDivMaxPos = selectionBg.pos.y
+        listDivMinPos = -pos.y + listDivMaxPos + 52
+
+        def onOpen(levelIndex):
+            mainDiv.active = True
+            self.__selectedLevelIndex = levelIndex
+            listDiv.pos = (0, listDivMaxPos - levelIndex * 40)
+            selectionBg.fillopacity = 0.5
+            self.__motionDiff = 0
+            self.__lastTargetPos = listDiv.pos.y
+            avg.fadeIn(mainDiv, 400)
+        self.__onOpenHandler = onOpen
+
+        def onClose():
+            def setInactive():
+                mainDiv.active = False
+            avg.fadeOut(mainDiv, 400, setInactive)
+
+        def onStart():
+            callback(self.__selectedLevelIndex)
+            onClose()
+
+        def onUpDown(event):
+            self.__motionDiff = 0
+
+        def onMotion(event):
+            self.__motionDiff += event.motion.y
+            motion = round(self.__motionDiff / 40) * 40
+            if motion:
+                pos = (0, min(max(self.__lastTargetPos+motion, listDivMinPos), listDivMaxPos))
+                avg.LinearAnim(listDiv, 'pos', 200, listDiv.pos, pos).start()
+                self.__motionDiff -= motion
+                self.__lastTargetPos = pos[1]
+                self.__selectedLevelIndex = int((listDivMaxPos-self.__lastTargetPos) / 40)
+                if levels[self.__selectedLevelIndex]['menuLabel'].color == 'ffffff':
+                    startBtn.setActive(True)
+                    avg.LinearAnim(selectionBg, 'fillopacity', 200,
+                            selectionBg.fillopacity, 0.5).start()
+                else:
+                    startBtn.setActive(False)
+                    avg.LinearAnim(selectionBg, 'fillopacity', 200,
+                            selectionBg.fillopacity, 0).start()
+
+        MoveButton(listFrameDiv, onUpDown, onUpDown, onMotion)
+        startBtn = LabelButton(menuDiv, (50, menuDiv.height-30), 'start level', 17, onStart)
+        LabelButton(menuDiv, (650, menuDiv.height-30), 'close menu', 17, onClose)
+
+    def open(self, levelIndex):
+        self.__onOpenHandler(levelIndex)
+
 
 class Planarity(AVGApp):
     multitouch = True
@@ -447,7 +536,12 @@ class Planarity(AVGApp):
     def _leave(self):
         pass
 
-if __name__ == '__main__':
-    Planarity.start(resolution = (1280,720))
 
+if __name__ == '__main__':
+    height = getenv('PLANARITY_800')
+    if height is None:
+        height = 720
+    else:
+        height = 800
+    Planarity.start(resolution = (1280, height))
 
