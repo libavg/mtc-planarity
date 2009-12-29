@@ -34,9 +34,6 @@ def getDelta(motion, topLeft, bottomRight, boundingSize):
 
 class VertexGroup(object):
     def __init__(self, gameController, polygon, vertices):
-        """
-        shape: list of coordinates of the enclosing polygon
-        """
         self._polygon = g_player.createNode("polygon", {
             'color': 'ffff00',
             'strokewidth': 3,
@@ -45,13 +42,14 @@ class VertexGroup(object):
             })
         self._vertices = vertices
         self._gameController = gameController
+        self._gameController.level.addVertexGroup(self)
         self._gameController.vertexDiv.appendChild(self._polygon)
 
         self._button = g_player.createNode('image', {'href': 'close-button.png'})
         self._gameController.vertexDiv.appendChild(self._button)
         self._button.pos = polygon[0] - self._button.size/2
         self._button.setEventHandler(avg.CURSORDOWN, avg.TOUCH | avg.MOUSE,
-            self._onClose)
+                lambda event: self.delete())
 
         xCoords = [vertex.pos.x for vertex in vertices]
         yCoords = [vertex.pos.y for vertex in vertices]
@@ -68,8 +66,8 @@ class VertexGroup(object):
 
         self._mover = MoveButton(self._polygon, onMotion=onMotion)
 
-    def _onClose(self, event):
-        # TODO remove the group interaction
+    def delete(self):
+        self._mover.delete()
         self._gameController.ungroupVertices(self._vertices)
         self._polygon.unlink()
         self._button.unlink()
@@ -358,6 +356,7 @@ class Level(object):
         self.__gameController = gameController
         self.__isRunning = False
         self.__numClashes = 0
+        self._vertexGroups = []
 
     def addClash(self):
         self.__numClashes +=1
@@ -410,6 +409,8 @@ class Level(object):
         for edge in self.edges:
             edge.delete()
         self.edges = []
+        for group in self._vertexGroups:
+            group.delete()
 
         for vertex in self.vertices:
             vertex.delete()
@@ -418,6 +419,9 @@ class Level(object):
     def getEnclosedVertices(self, polygon):
         return [vertex for vertex in self.vertices
                 if point_in_polygon(vertex.pos, polygon)]
+    
+    def addVertexGroup(self, group):
+        self._vertexGroups.append(group)
 
 
 def point_in_polygon(point, vertices):
