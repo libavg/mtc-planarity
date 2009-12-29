@@ -53,16 +53,18 @@ class VertexGroup(object):
 
         xCoords = [vertex.pos.x for vertex in vertices]
         yCoords = [vertex.pos.y for vertex in vertices]
-        topLeft = Point2D(min(xCoords), min(yCoords)) - vertices[0].size/2
-        bottomRight = Point2D(max(xCoords), max(yCoords)) + vertices[0].size/2
+        self.topLeft = Point2D(min(xCoords), min(yCoords)) - vertices[0].size/2
+        self.bottomRight = Point2D(max(xCoords), max(yCoords)) + vertices[0].size/2
 
         def onMotion(event):
-            delta = getDelta(event.motion, topLeft, bottomRight,
+            delta = getDelta(event.motion, self.topLeft, self.bottomRight,
                 self._gameController.vertexDiv.size)
             for i, vertex in enumerate(self._vertices):
                 vertex.pos += delta
             self._polygon.pos = [pos + delta for pos in self._polygon.pos]
             self._button.pos += delta
+            self.topLeft += delta
+            self.bottomRight += delta
 
         self._mover = MoveButton(self._polygon, onMotion=onMotion)
 
