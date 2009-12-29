@@ -281,7 +281,7 @@ class Vertex(object):
         self.__nodeOffset = self.__node.size / 2
         self.__node.pos = pos - self.__nodeOffset
         self.__clashState = False
-        self.__numHighlighters = 0
+        self._highlight = False
         self.draggable = True
 
         def onMotion(event):
@@ -305,21 +305,14 @@ class Vertex(object):
 
         if clashState != self.__clashState:
             self.__clashState = clashState
-            self.__setNodeImage(self.__numHighlighters>0)
+            self.__setNodeImage()
 
     def highlight(self, addHighlighter):
-        if addHighlighter:
-            self.__numHighlighters += 1
-            if self.__numHighlighters == 1:
-                self.__setNodeImage(True)
-        else:
-            assert self.__numHighlighters > 0
-            self.__numHighlighters -= 1
-            if self.__numHighlighters == 0:
-                self.__setNodeImage(False)
+        self._highlight = addHighlighter
+        self.__setNodeImage()
 
-    def __setNodeImage(self, highlight):
-        if highlight:
+    def __setNodeImage(self):
+        if self._highlight:
             href = 'vertex_hl'
         else:
             href = 'vertex'
