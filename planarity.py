@@ -374,6 +374,7 @@ class Level(object):
             type_, number = self.__scoring[2:4]
             if ((type_=='=' and self.__numClashes == number)
                     or (type_=='<' and self.__numClashes < number)):
+                    or (self.__numClashes <= number)):
                 self.__gameController.levelWon()
 
     def start(self, levelData):
