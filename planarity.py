@@ -15,7 +15,7 @@
 # You should have received a copy of the GNU General Public License
 # along with planarity.  If not, see <http://www.gnu.org/licenses/>.
 
-from libavg import avg, Point2D, AVGApp
+from libavg import avg, button, Point2D, AVGApp
 from libavg.AVGAppUtil import getMediaDir
 
 from os import getenv
@@ -27,6 +27,102 @@ from buttons import *
 
 g_player = avg.Player.get()
 
+def getDelta(motion, topLeft, bottomRight, boundingSize):
+    xDelta = min(max(motion.x, -topLeft.x), boundingSize.x - bottomRight.x)
+    yDelta = min(max(motion.y, -topLeft.y), boundingSize.y - bottomRight.y)
+    return Point2D(xDelta, yDelta)
+
+class VertexGroup(object):
+    def __init__(self, gameController, polygon, vertices):
+        """
+        shape: list of coordinates of the enclosing polygon
+        """
+        self._polygon = g_player.createNode("polygon", {
+            'color': 'ffff00',
+            'strokewidth': 3,
+            'opacity': 0.3,
+            'pos': polygon
+            })
+        self._vertices = vertices
+        self._gameController = gameController
+        self._gameController.vertexDiv.appendChild(self._polygon)
+
+        self._button = g_player.createNode('image', {'href': 'close-button.png'})
+        self._gameController.vertexDiv.appendChild(self._button)
+        self._button.pos = polygon[0] - self._button.size/2
+        self._button.setEventHandler(avg.CURSORDOWN, avg.TOUCH | avg.MOUSE,
+            self._onClose)
+
+        xCoords = [vertex.pos.x for vertex in vertices]
+        yCoords = [vertex.pos.y for vertex in vertices]
+        topLeft = Point2D(min(xCoords), min(yCoords)) - vertices[0].size/2
+        bottomRight = Point2D(max(xCoords), max(yCoords)) + vertices[0].size/2
+
+        def onMotion(event):
+            delta = getDelta(event.motion, topLeft, bottomRight,
+                self._gameController.vertexDiv.size)
+            for i, vertex in enumerate(self._vertices):
+                vertex.pos += delta
+            self._polygon.pos = [pos + delta for pos in self._polygon.pos]
+            self._button.pos += delta
+
+        self._mover = MoveButton(self._polygon, onMotion=onMotion)
+
+    def _onClose(self, event):
+        # TODO remove the group interaction
+        self._gameController.ungroupVertices(self._vertices)
+        self._polygon.unlink()
+        self._button.unlink()
+
+class GroupDetector(object):
+    """use this as an event handler"""
+    def __init__(self, gameController, event):
+        self._gameController = gameController
+        self._polyline = g_player.createNode("polyline", {
+            'color': 'ffff00',
+            'strokewidth': 1
+            })
+        gameController.groupDiv.appendChild(self._polyline)
+
+        self._cursorid = event.cursorid
+        self._polyline.setEventCapture(self._cursorid)
+        self._polyline.setEventHandler(avg.CURSORMOTION, avg.TOUCH | avg.MOUSE,
+            self._onMotion)
+        self._polyline.setEventHandler(avg.CURSORUP, avg.TOUCH | avg.MOUSE,
+            lambda event: self.delete())
+
+        self._onMotion(event)
+        pass
+
+    def getClosedPolygon(self):
+        """If the last edge intersects any edge, return a cleaned-up polygon
+        representing the enclosed region."""
+        points = self._polyline.pos  # in-Python object copy
+        if len(points) < 4:
+            return False
+        last_edge = points[-2:]
+        for i in range(len(points) - 2):
+            edge = [points[i], points[i + 1]]
+            intersection = line_intersect(edge, last_edge)
+            if intersection:
+                # include the intersection point itself, plus all the edges
+                # after the intersecting edge, omitting the last edge
+                return [intersection] + points[i + 1:-1]
+        return False
+
+    def _onMotion(self, event):
+        self._polyline.pos += [event.pos]
+        polygon = self.getClosedPolygon()
+        if polygon:
+            vertices = self._gameController.groupVertices(polygon)
+            if vertices:
+                self.delete()
+                VertexGroup(self._gameController, polygon, vertices)
+
+    def delete(self):
+        self._polyline.releaseEventCapture(self._cursorid)
+        self._polyline.setEventHandler(avg.CURSORMOTION, avg.TOUCH | avg.MOUSE, None)
+        self._polyline.unlink()
 
 def in_between(val,b1,b2):
     """return True if val is between b1 and b2"""
@@ -166,12 +262,6 @@ class Edge(object):
     def isClashed(self):
         return len(self.__clashes) > 0
 
-    def highlightOtherVertex(self, thisVertex, addHighlighter):
-        if thisVertex is self.__vertices[0]:
-            self.__vertices[1].highlight(addHighlighter)
-        else:
-            self.__vertices[0].highlight(addHighlighter)
-
     def delete(self):
         for clash in self.__clashes.values():
             clash.delete()
@@ -182,6 +272,7 @@ class Edge(object):
 
 class Vertex(object):
     def __init__(self, gameController, pos):
+        self._gameController = gameController
         pos = Point2D(pos)
         self.__edges = []
         self.__node = g_player.createNode('image', {'href':'vertex.png'})
@@ -191,24 +282,16 @@ class Vertex(object):
         self.__node.pos = pos - self.__nodeOffset
         self.__clashState = False
         self.__numHighlighters = 0
-
-        def onUpDown(event):
-            for edge in self.__edges:
-                edge.highlightOtherVertex(self, event.type==avg.CURSORDOWN)
+        self.draggable = True
 
         def onMotion(event):
-            pos.x = min(max(pos.x+event.motion.x, self.__nodeOffset.x),
-                    parent.width - self.__nodeOffset.x)
-            pos.y = min(max(pos.y+event.motion.y, self.__nodeOffset.y),
-                    parent.height - self.__nodeOffset.y)
-            self.__node.pos = pos - self.__nodeOffset
-            clashRemoved = False
-            for edge in self.__edges:
-                clashRemoved |= edge.onVertexMotion()
-            if clashRemoved:
-                gameController.level.checkWin()
+            if not self.draggable:
+                return
+            delta = getDelta(event.motion, self.__node.pos,
+                self.__node.pos + self.__node.size, parent.size)
+            self.pos += delta
 
-        self.__button = MoveButton(self.__node, onUpDown, onUpDown, onMotion)
+        self.__button = MoveButton(self.__node, onMotion=onMotion)
 
     def addEdge(self, edge):
         self.__edges.append(edge)
@@ -248,6 +331,19 @@ class Vertex(object):
     @property
     def pos(self):
         return self.__node.pos + self.__nodeOffset
+
+    @pos.setter
+    def pos(self, value):
+        self.__node.pos = value - self.__nodeOffset
+        clashRemoved = False
+        for edge in self.__edges:
+            clashRemoved |= edge.onVertexMotion()
+        if clashRemoved:
+            self._gameController.level.checkWin()
+
+    @property
+    def size(self):
+        return self.__node.size
 
     def delete(self):
         self.__button.delete()
@@ -319,6 +415,23 @@ class Level(object):
             vertex.delete()
         self.vertices = []
 
+    def getEnclosedVertices(self, polygon):
+        return [vertex for vertex in self.vertices
+                if point_in_polygon(vertex.pos, polygon)]
+
+
+def point_in_polygon(point, vertices):
+    """Return a true value if the point is inside the polygon."""
+    hits = 0
+    outside = Point2D(1E9, 0)  # polygon must not include this point
+    ray = [point, outside]
+    for edge in zip(vertices, vertices[1:] + [vertices[0]]):
+        intersection = line_intersect(ray, edge)
+        # avoid double-counting when the ray exactly hits a vertex
+        if intersection and intersection != edge[0]:
+            hits += 1
+    return hits % 2  # odd number of intersections => inside the polygon
+
 
 def loadLevels():
     fp = gzip.open(getMediaDir(__file__, 'data/levels.pickle.gz'))
@@ -329,17 +442,25 @@ def loadLevels():
 
 class GameController(object):
     def __init__(self, parentNode, onExit):
+        self.node = parentNode
         self.__levels = loadLevels()
-        bgImage = g_player.createNode('image', {'href':'black.png'})
-        bgImage.size = parentNode.size
-        parentNode.appendChild(bgImage)
+        background = g_player.createNode('image', {'href':'black.png'})
+        background.size = parentNode.size
+        parentNode.appendChild(background)
+
         self.gameDiv = g_player.createNode('div', {})
         parentNode.appendChild(self.gameDiv)
 
         self.edgeDiv = g_player.createNode('div', {'sensitive':False})
+        self.groupDiv = g_player.createNode('div', {'sensitive':False})
         self.vertexDiv = g_player.createNode('div', {})
+        self.vertexDiv.setEventHandler(avg.CURSORDOWN, avg.TOUCH | avg.MOUSE,
+            self._onDraw)
         self.clashDiv = g_player.createNode('div', {'sensitive':False})
-        for div in (self.edgeDiv, self.vertexDiv, self.clashDiv):
+
+        self._groupedVertices = set()
+
+        for div in (self.edgeDiv, self.vertexDiv, self.clashDiv, self.groupDiv):
             self.gameDiv.appendChild(div)
             div.size = parentNode.size
 
@@ -422,6 +543,24 @@ class GameController(object):
         else:
             avg.fadeOut(self.gameDiv, 600, nextLevel)
 
+    def groupVertices(self, polygon):
+        vertices = set(self.level.getEnclosedVertices(polygon))
+        newGroup = vertices - self._groupedVertices
+        self._groupedVertices = self._groupedVertices.union(newGroup)
+        for vertex in newGroup:
+            vertex.highlight(True)
+            vertex.draggable = False
+        return list(newGroup)
+
+    def ungroupVertices(self, vertices):
+        for vertex in vertices:
+            vertex.highlight(False)
+            vertex.draggable = True
+        self._groupedVertices -= set(vertices)
+
+    def _onDraw(self, event):
+        GroupDetector(self, event)
+        return False
 
 class LevelMenu:
     def __init__(self, parentNode, levels, callback):

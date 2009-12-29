@@ -38,6 +38,7 @@ class Button(object):
         self._node.setEventCapture(self._cursorID)
         self._node.setEventHandler(avg.CURSORUP, avg.MOUSE | avg.TOUCH, self.__onUp)
         self._onDown(event)
+        return True  # stop event propagation
 
     def __onUp(self, event):
         if not self._cursorID == event.cursorid:
@@ -112,10 +113,10 @@ class LabelButton(Button):
 
 
 class MoveButton(Button):
-    def __init__(self, node, onDown, onUp, onMotion):
-        self.__onDownCallback = onDown
-        self.__onUpCallback = onUp
-        self.__onMotionCallback = onMotion
+    def __init__(self, node, onDown=None, onUp=None, onMotion=None):
+        self.__onDownCallback = onDown or (lambda event: False)
+        self.__onUpCallback = onUp or (lambda event: False)
+        self.__onMotionCallback = onMotion or (lambda event: False)
         self.__slowdownID = None
         super(MoveButton, self).__init__(node)
 
