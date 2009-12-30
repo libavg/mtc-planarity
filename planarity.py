@@ -407,6 +407,7 @@ class Level(object):
         self.edges = []
         for group in self._vertexGroups:
             group.delete()
+        self._vertexGroups = []
 
         for vertex in self.vertices:
             vertex.delete()
