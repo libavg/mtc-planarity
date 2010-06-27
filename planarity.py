@@ -574,7 +574,8 @@ class LevelMenu:
 
         menuDiv = g_player.createNode('div', {
                 'pos':(mainDiv.width/2-400, 120),
-                'size':(800, mainDiv.height-236)})
+                'size':(800, mainDiv.height-236),
+                'crop':True})
         mainDiv.appendChild(menuDiv)
 
         bgImage = g_player.createNode('image', {
