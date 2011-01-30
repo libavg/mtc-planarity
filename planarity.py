@@ -383,7 +383,7 @@ class Level(object):
     def start(self, levelData):
         self.__levelData = levelData
         self.__scoring = levelData["scoring"]
-        self.__levelData['menuLabel'].color = 'ffffff' # unlock level -> white
+        self.__levelData['menuItem'].color = 'ffffff' # unlock level -> white
         self.vertices = []
         for vertexCoord in levelData["vertices"]:
             self.vertices.append(Vertex(self.__gameController, vertexCoord))
@@ -495,9 +495,10 @@ class GameController(object):
         parentNode.appendChild(self.winnerDiv)
         self.winnerDiv.pos = (parentNode.size - self.winnerDiv.getMediaSize()) / 2
 
-        LabelButton(parentNode, Point2D(50, 50)*g_scale, 'exit', 30*g_scale, onExit)
-        LabelButton(parentNode, Point2D(150, 50)*g_scale, 'levels', 30*g_scale,
-                callback = lambda:self.levelMenu.open(self.__curLevel-1))
+        LabelButton(parentNode, 'exit', 30*g_scale, onExit, Point2D(50, 50)*g_scale)
+        LabelButton(parentNode, 'levels', 30*g_scale,
+                lambda:self.levelMenu.open(self.__curLevel-1),
+                Point2D(150, 50)*g_scale)
 
         statusNode = g_player.createNode('words', {
                 'pos':(parentNode.width-50*g_scale, 50*g_scale),
@@ -586,6 +587,8 @@ class GameController(object):
         return False
 
 class LevelMenu:
+    VISIBLE_LEVELS = 11
+
     def __init__(self, parentNode, levels, callback):
         # main div catches all clicks and disables game underneath
         mainDiv = g_player.createNode('div', {
@@ -594,10 +597,14 @@ class LevelMenu:
                 'opacity':0})
         parentNode.appendChild(mainDiv)
 
+        fontSize = round(16 * g_scale)
+        itemHeight = fontSize * 3
+        listHeight = itemHeight * self.VISIBLE_LEVELS
+
+        menuSize = Point2D(round(mainDiv.width*0.75), listHeight+itemHeight)
         menuDiv = g_player.createNode('div', {
-                'pos':(mainDiv.width/2-400, 120),
-                'size':(800, mainDiv.height-236),
-                'crop':True})
+                'pos':(mainDiv.size-menuSize)/2,
+                'size':menuSize})
         mainDiv.appendChild(menuDiv)
 
         bgImage = g_player.createNode('image', {
@@ -606,13 +613,13 @@ class LevelMenu:
         menuDiv.appendChild(bgImage)
 
         listFrameDiv = g_player.createNode('div', {
-                'pos':(0, 2),
-                'size':(menuDiv.width, menuDiv.height-44)})
+                'size':(menuDiv.width, listHeight),
+                'crop':True})
         menuDiv.appendChild(listFrameDiv)
 
         selectionBg = g_player.createNode('rect', {
-                'pos':(-1, listFrameDiv.height/2-20),
-                'size':(listFrameDiv.width+2, 40),
+                'pos':(-1, (listFrameDiv.height-itemHeight)/2),
+                'size':(listFrameDiv.width+2, itemHeight),
                 'fillcolor':'ff6000'}) # red
         listFrameDiv.appendChild(selectionBg)
 
@@ -620,28 +627,30 @@ class LevelMenu:
                 'sensitive':False})
         listFrameDiv.appendChild(listDiv)
 
-        pos = Point2D(listFrameDiv.width/2, 12)
+        pos = Point2D(listFrameDiv.width/2, 0)
         for level in levels:
-            level['menuLabel'] = g_player.createNode('words', {
+            menuItem = g_player.createNode('words', {
                     'text':level['name'],
-                    'pos':pos,
+                    'fontsize':fontSize,
                     'color':'7f7f7f', # initially locked -> gray
                     'alignment':'center'})
-            listDiv.appendChild(level['menuLabel'])
-            pos += Point2D(0, 40)
+            menuItem.pos = pos + Point2D(0, (itemHeight-menuItem.getMediaSize().y)/2)
+            level['menuItem'] = menuItem
+            listDiv.appendChild(menuItem)
+            pos.y += itemHeight
 
         separatorLine = g_player.createNode('line', {
-                'pos1':(0, menuDiv.height-38),
-                'pos2':(menuDiv.width, menuDiv.height-38)})
+                'pos1':(0, listHeight),
+                'pos2':(menuDiv.width, listHeight)})
         menuDiv.appendChild(separatorLine)
 
         listDivMaxPos = selectionBg.pos.y
-        listDivMinPos = -pos.y + listDivMaxPos + 52
+        listDivMinPos = -pos.y + listDivMaxPos + itemHeight
 
         def onOpen(levelIndex):
             mainDiv.active = True
             self.__selectedLevelIndex = levelIndex
-            listDiv.pos = (0, listDivMaxPos - levelIndex * 40)
+            listDiv.pos = (0, listDivMaxPos - levelIndex * itemHeight)
             selectionBg.fillopacity = 0.5
             self.__motionDiff = 0
             self.__lastTargetPos = listDiv.pos.y
@@ -662,14 +671,14 @@ class LevelMenu:
 
         def onMotion(event):
             self.__motionDiff += event.motion.y
-            motion = round(self.__motionDiff / 40) * 40
+            motion = round(self.__motionDiff / itemHeight) * itemHeight
             if motion:
                 pos = (0, min(max(self.__lastTargetPos+motion, listDivMinPos), listDivMaxPos))
                 avg.LinearAnim(listDiv, 'pos', 200, listDiv.pos, pos).start()
                 self.__motionDiff -= motion
                 self.__lastTargetPos = pos[1]
-                self.__selectedLevelIndex = int((listDivMaxPos-self.__lastTargetPos) / 40)
-                if levels[self.__selectedLevelIndex]['menuLabel'].color == 'ffffff':
+                self.__selectedLevelIndex = int((listDivMaxPos-self.__lastTargetPos) / itemHeight)
+                if levels[self.__selectedLevelIndex]['menuItem'].color == 'ffffff':
                     startBtn.setActive(True)
                     avg.LinearAnim(selectionBg, 'fillopacity', 200,
                             selectionBg.fillopacity, 0.5).start()
@@ -679,8 +688,11 @@ class LevelMenu:
                             selectionBg.fillopacity, 0).start()
 
         MoveButton(listFrameDiv, onUpDown, onUpDown, onMotion)
-        startBtn = LabelButton(menuDiv, (50, menuDiv.height-30), 'start level', 17, onStart)
-        LabelButton(menuDiv, (650, menuDiv.height-30), 'close menu', 17, onClose)
+        startBtn = LabelButton(menuDiv, 'start level', 20*g_scale, onStart)
+        startBtn.setPos((itemHeight*2, listHeight+(itemHeight-startBtn.size.y)/2))
+        closeBtn = LabelButton(menuDiv, 'close menu', 20*g_scale, onClose)
+        closeBtn.setPos((menuDiv.width-itemHeight*2-closeBtn.size.x,
+                listHeight+(itemHeight-closeBtn.size.y)/2))
 
     def open(self, levelIndex):
         self.__onOpenHandler(levelIndex)

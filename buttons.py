@@ -57,7 +57,7 @@ class Button(object):
 
 
 class LabelButton(Button):
-    def __init__(self, parentNode, pos, text, size, callback):
+    def __init__(self, parentNode, text, size, callback, pos=(0, 0)):
         node = g_player.createNode('words', {
                 'pos':pos,
                 'fontsize':size,
@@ -67,6 +67,13 @@ class LabelButton(Button):
         self.__isActive = True
         self.__isOver = False
         super(LabelButton, self).__init__(node)
+
+    @property
+    def size(self):
+        return self._node.getMediaSize()
+
+    def setPos(self, pos):
+        self._node.pos = pos
 
     def _onDown(self, event):
         self._node.setEventHandler(avg.CURSOROUT, avg.MOUSE | avg.TOUCH, self.__onOut)
