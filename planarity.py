@@ -27,6 +27,7 @@ from buttons import *
 BASE_SIZE = Point2D(1280, 720)
 
 g_player = avg.Player.get()
+g_exitButton = True
 g_scale = 1.0
 
 def getDelta(motion, topLeft, bottomRight, boundingSize):
@@ -495,10 +496,12 @@ class GameController(object):
         parentNode.appendChild(self.winnerDiv)
         self.winnerDiv.pos = (parentNode.size - self.winnerDiv.getMediaSize()) / 2
 
-        LabelButton(parentNode, 'exit', 30*g_scale, onExit, Point2D(50, 50)*g_scale)
+        pos = Point2D(50, 50)
+        if g_exitButton:
+            LabelButton(parentNode, 'exit', 30*g_scale, onExit, pos*g_scale)
+            pos.x = 150
         LabelButton(parentNode, 'levels', 30*g_scale,
-                lambda:self.levelMenu.open(self.__curLevel-1),
-                Point2D(150, 50)*g_scale)
+                lambda:self.levelMenu.open(self.__curLevel-1), pos*g_scale)
 
         statusNode = g_player.createNode('words', {
                 'pos':(parentNode.width-50*g_scale, 50*g_scale),
@@ -718,4 +721,5 @@ class Planarity(AVGApp):
 
 
 if __name__ == '__main__':
+    g_exitButton = False
     Planarity.start(resolution = BASE_SIZE)
