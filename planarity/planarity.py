@@ -1,4 +1,6 @@
 #!/usr/bin/env python
+# -*- coding: utf-8 -*-
+#
 # Copyright (C) 2009
 #    Martin Heistermann, <mh at sponc dot de>
 #
@@ -15,7 +17,7 @@
 # You should have received a copy of the GNU General Public License
 # along with planarity.  If not, see <http://www.gnu.org/licenses/>.
 
-from libavg import avg, Point2D, AVGApp
+from libavg import avg, Point2D
 from libavg.AVGAppUtil import getMediaDir
 
 import math
@@ -24,10 +26,7 @@ import cPickle
 
 from buttons import *
 
-BASE_SIZE = Point2D(1280, 720)
-
 g_player = avg.Player.get()
-g_exitButton = True
 g_scale = 1.0
 
 def getDelta(motion, topLeft, bottomRight, boundingSize):
@@ -451,7 +450,10 @@ def loadLevels(size):
 
 
 class GameController(object):
-    def __init__(self, parentNode, onExit):
+    def __init__(self, parentNode, sizeScale, onExit):
+        global g_scale
+        g_scale = sizeScale
+
         self.node = parentNode
         self.__levels = loadLevels(parentNode.size)
 
@@ -483,12 +485,9 @@ class GameController(object):
         parentNode.appendChild(self.winnerDiv)
         self.winnerDiv.pos = (parentNode.size - self.winnerDiv.getMediaSize()) / 2
 
-        pos = Point2D(50, 50)
-        if g_exitButton:
-            LabelButton(parentNode, 'exit', 30*g_scale, onExit, pos*g_scale)
-            pos.x = 150
+        LabelButton(parentNode, 'exit', 30*g_scale, onExit, Point2D(50, 50)*g_scale)
         LabelButton(parentNode, 'levels', 30*g_scale,
-                lambda:self.levelMenu.open(self.__curLevel-1), pos*g_scale)
+                lambda:self.levelMenu.open(self.__curLevel-1), Point2D(150, 50)*g_scale)
 
         statusNode = g_player.createNode('words', {
                 'pos':(parentNode.width-50*g_scale, 50*g_scale),
@@ -686,27 +685,3 @@ class LevelMenu:
 
     def open(self, levelIndex):
         self.__onOpenHandler(levelIndex)
-
-
-class Planarity(AVGApp):
-    multitouch = True
-    def init(self):
-        self._parentNode.mediadir = getMediaDir(__file__)
-
-        global g_scale
-        size = self._parentNode.size
-        g_scale = min(size.x / BASE_SIZE.x, size.y / BASE_SIZE.y)
-
-        self.__controller = GameController(self._parentNode, onExit = self.leave)
-
-    def _enter(self):
-        #self.__controller.startLevel()
-        pass
-
-    def _leave(self):
-        pass
-
-
-if __name__ == '__main__':
-    g_exitButton = False
-    Planarity.start(resolution = BASE_SIZE)

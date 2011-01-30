@@ -1,0 +1,2 @@
+recursive-include planarity/data *
+recursive-include planarity/media *

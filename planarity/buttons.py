@@ -17,8 +17,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this library.  If not, see <http://www.gnu.org/licenses/>.
 #
-# Original author of this file: Thomas Schott, <scotch at cs dot tu-berlin dot de>
-#
+# Original author of this file: Thomas Schott, <scotty at c-base dot org>
 
 from libavg import avg
 
