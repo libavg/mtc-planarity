@@ -416,23 +416,10 @@ class Level(object):
 
     def getEnclosedVertices(self, polygon):
         return [vertex for vertex in self.vertices
-                if point_in_polygon(vertex.pos, polygon)]
-    
+                if avg.pointInPolygon(vertex.pos, polygon)]
+
     def addVertexGroup(self, group):
         self._vertexGroups.append(group)
-
-
-def point_in_polygon(point, vertices):
-    """Return a true value if the point is inside the polygon."""
-    hits = 0
-    outside = Point2D(1E9, 0)  # polygon must not include this point
-    ray = [point, outside]
-    for edge in zip(vertices, vertices[1:] + [vertices[0]]):
-        intersection = line_intersect(ray, edge)
-        # avoid double-counting when the ray exactly hits a vertex
-        if intersection and intersection != edge[0]:
-            hits += 1
-    return hits % 2  # odd number of intersections => inside the polygon
 
 
 def loadLevels(size):
