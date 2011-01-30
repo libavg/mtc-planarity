@@ -18,14 +18,16 @@
 from libavg import avg, Point2D, AVGApp
 from libavg.AVGAppUtil import getMediaDir
 
-from os import getenv
 import math
 import gzip
 import cPickle
 
 from buttons import *
 
+BASE_SIZE = Point2D(1280, 720)
+
 g_player = avg.Player.get()
+g_scale = 1.0
 
 def getDelta(motion, topLeft, bottomRight, boundingSize):
     xDelta = min(max(motion.x, -topLeft.x), boundingSize.x - bottomRight.x)
@@ -36,7 +38,7 @@ class VertexGroup(object):
     def __init__(self, gameController, polygon, vertices):
         self._polygon = g_player.createNode("polygon", {
             'color': 'ffff00',
-            'strokewidth': 3,
+            'strokewidth': 3*g_scale,
             'opacity': 0.3,
             'pos': polygon
             })
@@ -47,6 +49,7 @@ class VertexGroup(object):
 
         self._button = g_player.createNode('image', {'href': 'close-button.png'})
         self._gameController.vertexDiv.appendChild(self._button)
+        self._button.size *= g_scale
         self._button.pos = polygon[0] - self._button.size/2
         self._button.setEventHandler(avg.CURSORDOWN, avg.TOUCH | avg.MOUSE,
                 lambda event: self.delete())
@@ -182,8 +185,8 @@ class Clash(object):
             'color': 'aa0000'})
         """
         self.__node = g_player.createNode('rect', {
-                'size':Point2D(20,20),
-                'strokewidth':3,
+                'size':Point2D(20,20)*g_scale,
+                'strokewidth':3*g_scale,
                 'color':'aa0000'})
         gameController.clashDiv.appendChild(self.__node)
         self.goto(pos)
@@ -208,7 +211,7 @@ class Edge(object):
         self.__clashes = {}
         self.__gameController = gameController
 
-        self.__line = g_player.createNode('line', {'strokewidth':3})
+        self.__line = g_player.createNode('line', {'strokewidth':3*g_scale})
         gameController.edgeDiv.appendChild(self.__line)
         self.__draw()
         self.__clashState = False
@@ -273,11 +276,11 @@ class Edge(object):
 class Vertex(object):
     def __init__(self, gameController, pos):
         self._gameController = gameController
-        pos = Point2D(pos)
         self.__edges = []
         self.__node = g_player.createNode('image', {'href':'vertex.png'})
         parent = gameController.vertexDiv
         parent.appendChild(self.__node)
+        self.__node.size *= g_scale
         self.__nodeOffset = self.__node.size / 2
         self.__node.pos = pos - self.__nodeOffset
         self.__clashState = False
@@ -383,9 +386,6 @@ class Level(object):
         self.__levelData['menuLabel'].color = 'ffffff' # unlock level -> white
         self.vertices = []
         for vertexCoord in levelData["vertices"]:
-            # transform coord here
-            if self.__gameController.vertexDiv.height == 800:
-                vertexCoord = (vertexCoord[0], vertexCoord[1] + 40)
             self.vertices.append(Vertex(self.__gameController, vertexCoord))
 
         self.edges = []
@@ -434,17 +434,39 @@ def point_in_polygon(point, vertices):
     return hits % 2  # odd number of intersections => inside the polygon
 
 
-def loadLevels():
+def loadLevels(size):
     fp = gzip.open(getMediaDir(__file__, 'data/levels.pickle.gz'))
     levels = cPickle.load(fp)
     fp.close()
+
+    for level in levels:
+        vertices = level['vertices']
+        minPos = Point2D(size)
+        maxPos = Point2D(0, 0)
+        for i in xrange(len(vertices)):
+            vertices[i] = Point2D(vertices[i][0]*g_scale, vertices[i][1]*g_scale)
+            if vertices[i].x < minPos.x:
+                minPos.x = vertices[i].x
+            if vertices[i].y < minPos.y:
+                minPos.y = vertices[i].y
+            if vertices[i].x > maxPos.x:
+                maxPos.x = vertices[i].x
+            if vertices[i].y > maxPos.y:
+                maxPos.y = vertices[i].y
+        # center level on screen
+        levelSize = maxPos - minPos
+        levelOffset = (size - levelSize) / 2 - minPos
+        for i in xrange(len(vertices)):
+            vertices[i] += levelOffset
+
     return levels
 
 
 class GameController(object):
     def __init__(self, parentNode, onExit):
         self.node = parentNode
-        self.__levels = loadLevels()
+        self.__levels = loadLevels(parentNode.size)
+
         background = g_player.createNode('image', {'href':'black.png'})
         background.size = parentNode.size
         parentNode.appendChild(background)
@@ -467,19 +489,19 @@ class GameController(object):
 
         self.winnerDiv = g_player.createNode('words', {
                 'text':"YOU WON!",
-                'fontsize':100,
+                'fontsize':100*g_scale,
                 'opacity':0,
                 'sensitive':False})
         parentNode.appendChild(self.winnerDiv)
-        self.winnerDiv.pos = (parentNode.size - Point2D(self.winnerDiv.getMediaSize())) / 2
+        self.winnerDiv.pos = (parentNode.size - self.winnerDiv.getMediaSize()) / 2
 
-        LabelButton(parentNode, (50, 50), 'exit', 30, onExit)
-        LabelButton(parentNode, (150, 50), 'levels', 30,
+        LabelButton(parentNode, Point2D(50, 50)*g_scale, 'exit', 30*g_scale, onExit)
+        LabelButton(parentNode, Point2D(150, 50)*g_scale, 'levels', 30*g_scale,
                 callback = lambda:self.levelMenu.open(self.__curLevel-1))
 
         statusNode = g_player.createNode('words', {
-                'pos':(parentNode.width-50, 50),
-                'fontsize':30,
+                'pos':(parentNode.width-50*g_scale, 50*g_scale),
+                'fontsize':30*g_scale,
                 'alignment':'right',
                 'sensitive':False})
         parentNode.appendChild(statusNode)
@@ -493,15 +515,15 @@ class GameController(object):
         bgImage = g_player.createNode('image', {'href':'menubg.png'})
         levelNameDiv.appendChild(bgImage)
         levelNameNode = g_player.createNode('words', {
-                'fontsize':30,
-                'pos':(20, 20),
+                'fontsize':30*g_scale,
+                'pos':Point2D(20, 20)*g_scale,
                 'sensitive':False})
         levelNameDiv.appendChild(levelNameNode)
 
         def setLevelName(text):
             levelNameNode.text = text
             levelNameSize = levelNameNode.getMediaSize()
-            bgImage.size = levelNameSize + Point2D(40, 40)
+            bgImage.size = levelNameSize + Point2D(40, 40) * g_scale
             levelNameDiv.pos = parentNode.size / 2 - bgImage.size / 2
             levelNameDiv.opacity = 1
             avg.fadeOut(levelNameDiv, 6000)
@@ -668,6 +690,11 @@ class Planarity(AVGApp):
     multitouch = True
     def init(self):
         self._parentNode.mediadir = getMediaDir(__file__)
+
+        global g_scale
+        size = self._parentNode.size
+        g_scale = min(size.x / BASE_SIZE.x, size.y / BASE_SIZE.y)
+
         self.__controller = GameController(self._parentNode, onExit = self.leave)
 
     def _enter(self):
@@ -679,10 +706,4 @@ class Planarity(AVGApp):
 
 
 if __name__ == '__main__':
-    height = getenv('PLANARITY_800')
-    if height is None:
-        height = 720
-    else:
-        height = 800
-    Planarity.start(resolution = (1280, height))
-
+    Planarity.start(resolution = BASE_SIZE)
