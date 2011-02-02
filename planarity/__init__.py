@@ -20,7 +20,7 @@
 # along with this file.  If not, see <http://www.gnu.org/licenses/>.
 
 import os
-from libavg import avg, AVGApp
+from libavg import avg, gameapp
 from libavg.AVGAppUtil import getMediaDir, createImagePreviewNode
 from planarity import GameController
 
@@ -28,25 +28,14 @@ __all__ = [ 'apps', 'Planarity']
 
 BASE_SIZE = (1280, 720)
 
-g_ownStarter = False
 
-class Planarity(AVGApp):
-    multitouch = True
-
-    @classmethod
-    def start(cls, *args, **kwargs):
-        if not 'resolution' in kwargs:
-            kwargs['resolution'] = BASE_SIZE
-        global g_ownStarter
-        g_ownStarter = True
-        super(Planarity, cls).start(*args, **kwargs)
-
+class Planarity(gameapp.GameApp):
     def init(self):
         self._parentNode.mediadir = getMediaDir(__file__)
         size = self._parentNode.size
         scale = min(size.x / BASE_SIZE[0], size.y / BASE_SIZE[1])
         self.__controller = GameController(self._parentNode, scale,
-                onExit = avg.Player.get().stop if g_ownStarter else self.leave)
+                onExit = avg.Player.get().stop if gameapp.ownStarter else self.leave)
 
 
 def createPreviewNode(maxSize):
