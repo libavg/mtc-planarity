@@ -332,18 +332,18 @@ class Vertex(object):
         else:
             self.__node.href = href + '.png'
 
-    @property
-    def pos(self):
+    def getPos(self):
         return self.__node.pos + self.__nodeOffset
 
-    @pos.setter
-    def pos(self, value):
+    def setPos(self, value):
         self.__node.pos = value - self.__nodeOffset
         clashRemoved = False
         for edge in self.__edges:
             clashRemoved |= edge.onVertexMotion()
         if clashRemoved:
             self._gameController.level.checkWin()
+
+    pos = property(getPos, setPos)
 
     @property
     def size(self):
