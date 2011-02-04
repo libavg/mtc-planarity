@@ -17,22 +17,28 @@
 # You should have received a copy of the GNU General Public License
 # along with planarity.  If not, see <http://www.gnu.org/licenses/>.
 
-from libavg import avg, Point2D
+from libavg import avg, gameapp, Point2D
 from libavg.AVGAppUtil import getMediaDir
 
 import math
 import gzip
 import cPickle
+from hashlib import md5
 
 from buttons import *
 
+BASE_SIZE = (1280, 720)
+DS_STATUS_TAG = 'planarity'[::-1]
+
 g_player = avg.Player.get()
 g_scale = 1.0
+
 
 def getDelta(motion, topLeft, bottomRight, boundingSize):
     xDelta = min(max(motion.x, -topLeft.x), boundingSize.x - bottomRight.x)
     yDelta = min(max(motion.y, -topLeft.y), boundingSize.y - bottomRight.y)
     return Point2D(xDelta, yDelta)
+
 
 class VertexGroup(object):
     def __init__(self, gameController, polygon, vertices):
@@ -76,6 +82,7 @@ class VertexGroup(object):
         self._gameController.ungroupVertices(self._vertices)
         self._polygon.unlink()
         self._button.unlink()
+
 
 class GroupDetector(object):
     """use this as an event handler"""
@@ -126,6 +133,7 @@ class GroupDetector(object):
         self._polyline.releaseEventCapture(self._cursorid)
         self._polyline.setEventHandler(avg.CURSORMOTION, avg.TOUCH | avg.MOUSE, None)
         self._polyline.unlink()
+
 
 def in_between(val,b1,b2):
     """return True if val is between b1 and b2"""
@@ -383,7 +391,7 @@ class Level(object):
     def start(self, levelData):
         self.__levelData = levelData
         self.__scoring = levelData["scoring"]
-        self.__levelData['menuItem'].color = 'ffffff' # unlock level -> white
+
         self.vertices = []
         for vertexCoord in levelData["vertices"]:
             self.vertices.append(Vertex(self.__gameController, vertexCoord))
@@ -426,11 +434,15 @@ def loadLevels(size):
     levels = cPickle.load(fp)
     fp.close()
 
-    for level in levels:
+    currentLevel = None
+    savedHash = gameapp.Datastore.get(DS_STATUS_TAG).data
+    levelHash = md5(gameapp.app().getUserdataPath(''))
+    for levelIdx, level in enumerate(levels):
         vertices = level['vertices']
         minPos = Point2D(size)
         maxPos = Point2D(0, 0)
         for i in xrange(len(vertices)):
+            levelHash.update(str(vertices[i]))
             vertices[i] = Point2D(vertices[i][0]*g_scale, vertices[i][1]*g_scale)
             if vertices[i].x < minPos.x:
                 minPos.x = vertices[i].x
@@ -440,22 +452,25 @@ def loadLevels(size):
                 maxPos.x = vertices[i].x
             if vertices[i].y > maxPos.y:
                 maxPos.y = vertices[i].y
+        level['hash'] = levelHash.hexdigest()
+        if currentLevel is None and level['hash'] == savedHash:
+            currentLevel = levelIdx
+
         # center level on screen
         levelSize = maxPos - minPos
         levelOffset = (size - levelSize) / 2 - minPos
         for i in xrange(len(vertices)):
             vertices[i] += levelOffset
 
-    return levels
+    return levels, 0 if currentLevel is None else currentLevel
 
 
 class GameController(object):
-    def __init__(self, parentNode, sizeScale, onExit):
-        global g_scale
-        g_scale = sizeScale
+    def __init__(self, parentNode, onExit):
+        self.__ds = gameapp.Datastore(DS_STATUS_TAG, '', lambda s: type(s) == str)
 
         self.node = parentNode
-        self.__levels = loadLevels(parentNode.size)
+        self.__levels, self.__curLevel = loadLevels(parentNode.size)
 
         background = g_player.createNode('image', {'href':'black.png'})
         background.size = parentNode.size
@@ -468,7 +483,7 @@ class GameController(object):
         self.groupDiv = g_player.createNode('div', {'sensitive':False})
         self.vertexDiv = g_player.createNode('div', {})
         self.vertexDiv.setEventHandler(avg.CURSORDOWN, avg.TOUCH | avg.MOUSE,
-            self._onDraw)
+                self._onDraw)
         self.clashDiv = g_player.createNode('div', {'sensitive':False})
 
         self._groupedVertices = set()
@@ -519,9 +534,9 @@ class GameController(object):
             avg.fadeOut(levelNameDiv, 6000)
         self.__levelNameHandler = setLevelName
 
-        self.levelMenu = LevelMenu(parentNode, self.__levels, self.switchLevel)
+        self.levelMenu = LevelMenu(parentNode, self.__levels, self.__curLevel,
+                self.switchLevel)
 
-        self.__curLevel = 0
         self.level = Level(self)
         self.__startNextLevel()
 
@@ -550,6 +565,11 @@ class GameController(object):
                 avg.fadeOut(self.winnerDiv, 400)
             avg.fadeIn(self.gameDiv, 400)
         self.level.pause()
+        level = self.__levels[self.__curLevel]
+        if level['menuItem'].color == '7f7f7f':
+            # unlock level
+            level['menuItem'].color = 'ffffff'
+            self.__ds.data = level['hash']
         if showWinnerDiv:
             avg.fadeIn(self.winnerDiv, 600)
             avg.fadeOut(self.gameDiv, 600, lambda: g_player.setTimeout(1000, nextLevel))
@@ -575,10 +595,11 @@ class GameController(object):
         GroupDetector(self, event)
         return False
 
+
 class LevelMenu:
     VISIBLE_LEVELS = 11
 
-    def __init__(self, parentNode, levels, callback):
+    def __init__(self, parentNode, levels, curLevel, callback):
         # main div catches all clicks and disables game underneath
         mainDiv = g_player.createNode('div', {
                 'size':parentNode.size,
@@ -617,11 +638,11 @@ class LevelMenu:
         listFrameDiv.appendChild(listDiv)
 
         pos = Point2D(listFrameDiv.width/2, 0)
-        for level in levels:
+        for levelIdx, level in enumerate(levels):
             menuItem = g_player.createNode('words', {
                     'text':level['name'],
                     'fontsize':fontSize,
-                    'color':'7f7f7f', # initially locked -> gray
+                    'color':'7f7f7f' if levelIdx > curLevel else 'ffffff',
                     'alignment':'center'})
             menuItem.pos = pos + Point2D(0, (itemHeight-menuItem.getMediaSize().y)/2)
             level['menuItem'] = menuItem
@@ -685,3 +706,18 @@ class LevelMenu:
 
     def open(self, levelIndex):
         self.__onOpenHandler(levelIndex)
+
+
+class Planarity(gameapp.GameApp):
+    def init(self):
+        self._parentNode.mediadir = getMediaDir(__file__)
+
+        global g_scale
+        size = self._parentNode.size
+        g_scale = min(size.x / BASE_SIZE[0], size.y / BASE_SIZE[1])
+        self.__controller = GameController(self._parentNode,
+                onExit = avg.Player.get().stop if gameapp.ownStarter else self.leave)
+
+
+if __name__ == '__main__':
+    Planarity.start()
