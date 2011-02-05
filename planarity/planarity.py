@@ -435,8 +435,9 @@ def loadLevels(size):
     fp.close()
 
     currentLevel = None
-    savedHash = gameapp.Datastore.get(DS_STATUS_TAG).data
-    levelHash = md5(gameapp.app().getUserdataPath(''))
+    app = Planarity.get()
+    savedHash = app.getDatastore(DS_STATUS_TAG).data
+    levelHash = md5(app.getUserdataPath(''))
     for levelIdx, level in enumerate(levels):
         vertices = level['vertices']
         minPos = Point2D(size)
@@ -467,7 +468,7 @@ def loadLevels(size):
 
 class GameController(object):
     def __init__(self, parentNode, onExit):
-        self.__ds = gameapp.Datastore(DS_STATUS_TAG, '', lambda s: type(s) == str)
+        self.__ds = Planarity.get().initDatastore(DS_STATUS_TAG, '', lambda s: type(s) == str)
 
         self.node = parentNode
         self.__levels, self.__curLevel = loadLevels(parentNode.size)
@@ -716,7 +717,7 @@ class Planarity(gameapp.GameApp):
         size = self._parentNode.size
         g_scale = min(size.x / BASE_SIZE[0], size.y / BASE_SIZE[1])
         self.__controller = GameController(self._parentNode,
-                onExit = avg.Player.get().stop if gameapp.ownStarter else self.leave)
+                onExit = self.quit)
 
 
 if __name__ == '__main__':
