@@ -375,7 +375,9 @@ class Level(object):
 
     def getStatus(self):
         type_, number = self.__scoring[2:4]
-        return "clashes left: %u<br/>goal %c %u" %(self.__numClashes, type_, number)
+        if type_ == '*':
+            type_ = '&lt;='
+        return "clashes left: %u<br/>goal: %s %u" %(self.__numClashes, type_, number)
 
     def getName(self):
         return self.__levelData['name']
@@ -383,8 +385,8 @@ class Level(object):
     def checkWin(self):
         if self.__isRunning:
             type_, number = self.__scoring[2:4]
+            # possible types: '=' (==) and '*' (<=)
             if ((type_=='=' and self.__numClashes == number)
-                    or (type_=='<' and self.__numClashes < number)
                     or (self.__numClashes <= number)):
                 self.__gameController.levelWon()
 
