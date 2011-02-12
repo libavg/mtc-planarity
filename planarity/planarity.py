@@ -716,6 +716,18 @@ class LevelMenu(object):
 
 
 class AboutBox(avg.DivNode):
+    ABOUT_TEXT = [
+        (32, 'Planarity'),
+        (24, 'A multitouch adaption of the popular<br/>' \
+             'game Planarity, aka Untangle'),
+        (20, 'Authors:<br/>' \
+             'Martin Heistermann &lt;mh@sponc.de&gt;<br/>' \
+             'Thomas Schott &lt;scotty@c-base.org&gt;<br/>' \
+             'Ka-Ping Yee &lt;ping@zesty.ca&gt;'),
+        (20, 'levels borrowed from gPlanarity by Monty &lt;monty@xiph.org&gt;<br/>' \
+             'based on libavg &lt;www.libavg.de&gt;')
+    ]
+
     def __init__(self, boxSize, aboutHeight, **kwargs):
         kwargs['size'] = kwargs['parent'].size
         kwargs['active'] = False
@@ -735,8 +747,14 @@ class AboutBox(avg.DivNode):
         closeBtn.setPos(((boxDiv.width-closeBtn.size.x) / 2,
                 aboutHeight + (boxSize.y-aboutHeight-closeBtn.size.y) / 2))
 
-        aboutDiv = avg.DivNode(size=(boxSize.x, aboutHeight), parent=boxDiv)
-        #TODO add about stuff to aboutDiv here
+        aboutDiv = avg.DivNode(size=(boxSize.x, aboutHeight), sensitive=False,
+                parent=boxDiv)
+        pos = Point2D(aboutDiv.width / 2, 0)
+        for size, txt in self.ABOUT_TEXT:
+            node = avg.WordsNode(text=txt, pos=pos, fontsize=size*g_scale,
+                    alignment='center', parent=aboutDiv)
+            pos.y += node.height + node.getLineExtents(0).y
+        aboutDiv.pos = (0, (aboutHeight - pos.y) / 2)
 
     def open(self):
         self.active = True
