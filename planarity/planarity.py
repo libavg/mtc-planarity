@@ -504,8 +504,10 @@ class GameController(object):
         self.winnerDiv.pos = (parentNode.size - self.winnerDiv.getMediaSize()) / 2
 
         LabelButton(parentNode, 'exit', 30*g_scale, onExit, Point2D(50, 50)*g_scale)
+        LabelButton(parentNode, 'about', 30*g_scale,
+                lambda:self.aboutBox.open(), Point2D(50, 100)*g_scale)
         LabelButton(parentNode, 'levels', 30*g_scale,
-                lambda:self.levelMenu.open(self.__curLevel-1), Point2D(150, 50)*g_scale)
+                lambda:self.levelMenu.open(self.__curLevel-1), Point2D(50, 150)*g_scale)
 
         statusNode = g_player.createNode('words', {
                 'pos':(parentNode.width-50*g_scale, 50*g_scale),
@@ -539,6 +541,8 @@ class GameController(object):
 
         self.levelMenu = LevelMenu(parentNode, self.__levels, self.__curLevel,
                 self.switchLevel)
+        self.aboutBox = AboutBox(self.levelMenu.menuSize, self.levelMenu.listHeight,
+                parent=parentNode)
 
         self.level = Level(self)
         self.__startNextLevel()
@@ -599,7 +603,7 @@ class GameController(object):
         return False
 
 
-class LevelMenu:
+class LevelMenu(object):
     VISIBLE_LEVELS = 11
 
     def __init__(self, parentNode, levels, curLevel, callback):
@@ -612,12 +616,12 @@ class LevelMenu:
 
         fontSize = round(16 * g_scale)
         itemHeight = fontSize * 3
-        listHeight = itemHeight * self.VISIBLE_LEVELS
+        self.listHeight = itemHeight * self.VISIBLE_LEVELS
 
-        menuSize = Point2D(round(mainDiv.width*0.75), listHeight+itemHeight)
+        self.menuSize = Point2D(round(mainDiv.width*0.75), self.listHeight+itemHeight)
         menuDiv = g_player.createNode('div', {
-                'pos':(mainDiv.size-menuSize)/2,
-                'size':menuSize})
+                'pos':(mainDiv.size-self.menuSize)/2,
+                'size':self.menuSize})
         mainDiv.appendChild(menuDiv)
 
         bgImage = g_player.createNode('image', {
@@ -626,7 +630,7 @@ class LevelMenu:
         menuDiv.appendChild(bgImage)
 
         listFrameDiv = g_player.createNode('div', {
-                'size':(menuDiv.width, listHeight),
+                'size':(menuDiv.width, self.listHeight),
                 'crop':True})
         menuDiv.appendChild(listFrameDiv)
 
@@ -653,8 +657,8 @@ class LevelMenu:
             pos.y += itemHeight
 
         separatorLine = g_player.createNode('line', {
-                'pos1':(0, listHeight),
-                'pos2':(menuDiv.width, listHeight)})
+                'pos1':(0, self.listHeight),
+                'pos2':(menuDiv.width, self.listHeight)})
         menuDiv.appendChild(separatorLine)
 
         listDivMaxPos = selectionBg.pos.y
@@ -702,13 +706,41 @@ class LevelMenu:
 
         MoveButton(listFrameDiv, onUpDown, onUpDown, onMotion)
         startBtn = LabelButton(menuDiv, 'start level', 20*g_scale, onStart)
-        startBtn.setPos((itemHeight*2, listHeight+(itemHeight-startBtn.size.y)/2))
+        startBtn.setPos((itemHeight*2, self.listHeight+(itemHeight-startBtn.size.y)/2))
         closeBtn = LabelButton(menuDiv, 'close menu', 20*g_scale, onClose)
         closeBtn.setPos((menuDiv.width-itemHeight*2-closeBtn.size.x,
-                listHeight+(itemHeight-closeBtn.size.y)/2))
+                self.listHeight+(itemHeight-closeBtn.size.y)/2))
 
     def open(self, levelIndex):
         self.__onOpenHandler(levelIndex)
+
+
+class AboutBox(avg.DivNode):
+    def __init__(self, boxSize, aboutHeight, **kwargs):
+        kwargs['size'] = kwargs['parent'].size
+        kwargs['active'] = False
+        kwargs['opacity'] = 0
+        super(AboutBox, self).__init__(**kwargs)
+
+        boxDiv = avg.DivNode(pos=(self.size-boxSize)/2, size=boxSize, parent=self)
+        avg.ImageNode(href='menubg.png', size=boxSize, parent=boxDiv)
+        avg.LineNode(pos1=(0, aboutHeight), pos2=(boxSize.x, aboutHeight), parent=boxDiv)
+
+        def onClose():
+            def setInactive():
+                self.active = False
+            avg.fadeOut(self, 400, setInactive)
+
+        closeBtn = LabelButton(boxDiv, 'close about', 20*g_scale, onClose)
+        closeBtn.setPos(((boxDiv.width-closeBtn.size.x) / 2,
+                aboutHeight + (boxSize.y-aboutHeight-closeBtn.size.y) / 2))
+
+        aboutDiv = avg.DivNode(size=(boxSize.x, aboutHeight), parent=boxDiv)
+        #TODO add about stuff to aboutDiv here
+
+    def open(self):
+        self.active = True
+        avg.fadeIn(self, 400)
 
 
 class Planarity(gameapp.GameApp):
