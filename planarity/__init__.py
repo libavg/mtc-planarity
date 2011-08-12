@@ -20,7 +20,7 @@
 # along with this file.  If not, see <http://www.gnu.org/licenses/>.
 
 import os
-from libavg.AVGAppUtil import getMediaDir, createImagePreviewNode
+from libavg.utils import getMediaDir, createImagePreviewNode
 from planarity import Planarity
 
 __all__ = [ 'apps', 'Planarity']

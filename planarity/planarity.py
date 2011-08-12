@@ -18,7 +18,7 @@
 # along with planarity.  If not, see <http://www.gnu.org/licenses/>.
 
 from libavg import avg, gameapp, Point2D
-from libavg.AVGAppUtil import getMediaDir
+from libavg.utils import getMediaDir
 
 import math
 import gzip
