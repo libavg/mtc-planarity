@@ -728,11 +728,12 @@ class AboutBox(avg.DivNode):
              'based on libavg &lt;www.libavg.de&gt;')
     ]
 
-    def __init__(self, boxSize, aboutHeight, **kwargs):
-        kwargs['size'] = kwargs['parent'].size
+    def __init__(self, boxSize, aboutHeight, parent=None, **kwargs):
+        kwargs['size'] = parent.size
         kwargs['active'] = False
         kwargs['opacity'] = 0
         super(AboutBox, self).__init__(**kwargs)
+        self.registerInstance(self, parent)
 
         boxDiv = avg.DivNode(pos=(self.size-boxSize)/2, size=boxSize, parent=self)
         avg.ImageNode(href='menubg.png', size=boxSize, parent=boxDiv)
