@@ -20,6 +20,7 @@
 # along with this file.  If not, see <http://www.gnu.org/licenses/>.
 
 import sys
+import libavg
 
 try:
     import planarity
@@ -33,4 +34,4 @@ except ImportError:
         sys.exit(1)
 
 if __name__ == '__main__':
-    planarity.Planarity.start()
+    libavg.app.App().run(planarity.Planarity(), app_resolution='', app_fullscreen='true')
