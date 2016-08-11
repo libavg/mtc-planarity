@@ -766,27 +766,6 @@ class Planarity(app.MainDiv):
         g_scale = min(self.size.x / BASE_SIZE[0], self.size.y / BASE_SIZE[1])
         self.__controller = GameController(self, onExit = player.stop)
 
-        self.__setupMultitouch()
-
-    def __setupMultitouch(self):
-        if app.instance.settings.getBoolean('multitouch_enabled'):
-            return
-
-        import platform
-        import os
-
-        if platform.system() == 'Linux':
-            os.putenv('AVG_MULTITOUCH_DRIVER', 'XINPUT')
-        elif platform.system() == 'Windows':
-            os.putenv('AVG_MULTITOUCH_DRIVER', 'WIN7TOUCH')
-        else:
-            os.putenv('AVG_MULTITOUCH_DRIVER', 'TUIO')
-
-        try:
-            player.enableMultitouch()
-        except Exception, e:
-            os.putenv('AVG_MULTITOUCH_DRIVER', 'TUIO')
-            player.enableMultitouch()
 
 if __name__ == '__main__':
     app.App().run(Planarity())
